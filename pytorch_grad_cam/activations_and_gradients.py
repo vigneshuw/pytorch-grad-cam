@@ -6,7 +6,7 @@ class ActivationsAndGradients:
         self.model = model
         self.gradients = []
         self.activations = []
-        self.reshape_transform = reshape_transform
+        self.reshape_transform = reshape_transform      # What does this one do?
         self.handles = []
         for target_layer in target_layers:
             self.handles.append(

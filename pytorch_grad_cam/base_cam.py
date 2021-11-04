@@ -13,17 +13,22 @@ class BaseCAM:
                  use_cuda=False,
                  reshape_transform=None,
                  compute_input_gradient=False,
-                 uses_gradients=True):
-        self.model = model.eval()
-        self.target_layers = target_layers
-        self.cuda = use_cuda
+                 uses_gradients=True, **kwargs):
+        self.model = model.eval()       # Turn off gradient computations
+        self.target_layers = target_layers      # The selected layer for gradCAM/CAM
+        self.cuda = use_cuda        # Enable CUDA if required
         if self.cuda:
             self.model = model.cuda()
-        self.reshape_transform = reshape_transform
+        self.reshape_transform = reshape_transform      # If the selected layer is a non-convolution layer
         self.compute_input_gradient = compute_input_gradient
         self.uses_gradients = uses_gradients
         self.activations_and_grads = ActivationsAndGradients(
             self.model, target_layers, reshape_transform)
+
+        # In cases where the output is not straightforward
+        # and is a dictionary
+        if kwargs.keys():
+            self._classification_logits = kwargs["classification_logit"]
 
     """ Get a vector of weights for every channel in the target layer.
         Methods that return weights channels,
@@ -40,7 +45,19 @@ class BaseCAM:
     def get_loss(self, output, target_category):
         loss = 0
         for i in range(len(target_category)):
-            loss = loss + output[i, target_category[i]]
+
+            # Cases where we need to classify and also have a bounding box
+            if isinstance(output, dict):
+
+                # Format the output tensor -> In DeTR it is a bit different
+                with torch.no_grad():
+                    logits_bbox_id = output[self._classification_logits][i, :, target_category].argmax()
+
+                loss = loss + output[self._classification_logits][i, logits_bbox_id, target_category[i]]
+            else:
+                loss = loss + output[i, target_category[i]]
+
+        print(loss)
         return loss
 
     def get_cam_image(self,
@@ -53,6 +70,7 @@ class BaseCAM:
         weights = self.get_cam_weights(input_tensor, target_layer,
                                        target_category, activations, grads)
         weighted_activations = weights[:, :, None, None] * activations
+
         if eigen_smooth:
             cam = get_2d_projection(weighted_activations)
         else:
@@ -72,7 +90,12 @@ class BaseCAM:
             target_category = [target_category] * input_tensor.size(0)
 
         if target_category is None:
-            target_category = np.argmax(output.cpu().data.numpy(), axis=-1)
+            # Cases where the prediction result is a dict - Classification and bounding boxes
+            if isinstance(output, dict):
+                target_category = np.argmax(output["pred_logits"].cpu().data.numpy(), axis=-1) # Wont work
+            else:
+                target_category = np.argmax(output.cpu().data.numpy(), axis=-1)
+
         else:
             assert(len(target_category) == input_tensor.size(0))
 
