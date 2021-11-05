@@ -43,7 +43,7 @@ class BaseCAM:
         raise Exception("Not Implemented")
 
     def get_loss(self, output, target_category):
-        loss = 0
+        loss = [0.0]
         for i in range(len(target_category)):
 
             # Cases where we need to classify and also have a bounding box
@@ -51,14 +51,35 @@ class BaseCAM:
 
                 # Format the output tensor -> In DeTR it is a bit different
                 with torch.no_grad():
-                    logits_bbox_id = output[self._classification_logits][i, :, target_category].argmax()
 
-                loss = loss + output[self._classification_logits][i, logits_bbox_id, target_category[i]]
+                    # Get the classes to check for multiple occurances
+                    predictions = output[self._classification_logits].argmax(axis=2)
+                    temp = (predictions == target_category[i]).nonzero(as_tuple=True)
+                    # Stack them by rows
+                    # Each row for a multi target_category in a single image
+                    target_locs = torch.stack(temp, axis=1)
+                    # Get the number of target categories
+                    num_target_categories = target_locs.shape[0]
+
+                    if num_target_categories > 1:
+                        for j in range(num_target_categories-1):
+                            loss.append(0.0)
+
+                    #logits_bbox_id = output[self._classification_logits][i, :, target_category].argmax()
+
+                for t_cat_inst in range(num_target_categories):
+                    loss[t_cat_inst] = loss[t_cat_inst] + output[self._classification_logits][i, target_locs[t_cat_inst, 1],
+                                                                      target_category[i]]
             else:
                 loss = loss + output[i, target_category[i]]
 
-        print(loss)
-        return loss
+        print(f"The max logit value is {loss}")
+
+        # Make sure that the loss is a tensor
+        if isinstance(loss, float):
+            raise Exception("The target category is missing in the prediction")
+
+        return loss[0]
 
     def get_cam_image(self,
                       input_tensor,
