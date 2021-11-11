@@ -46,6 +46,7 @@ class BaseCAM:
         loss = [0.0]
         for i in range(len(target_category)):
 
+            print(type(output))
             # Cases where we need to classify and also have a bounding box
             if isinstance(output, dict):
 
@@ -70,8 +71,17 @@ class BaseCAM:
                 for t_cat_inst in range(num_target_categories):
                     loss[t_cat_inst] = loss[t_cat_inst] + output[self._classification_logits][i, target_locs[t_cat_inst, 1],
                                                                       target_category[i]]
+
+            elif isinstance(output, tuple):
+
+                print(output)
+                predictions = output[0]
+                max_score_bb_index, max_class_bb = output[1]
+
+                loss[0] = loss[0] + predictions[i, max_score_bb_index, 5+max_class_bb]
+
             else:
-                loss = loss + output[i, target_category[i]]
+                loss[0] = loss[0] + output[i, target_category[i]]
 
         print(f"The max logit value is {loss}")
 
