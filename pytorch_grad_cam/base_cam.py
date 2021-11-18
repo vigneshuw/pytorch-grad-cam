@@ -74,11 +74,11 @@ class BaseCAM:
 
             elif isinstance(output, tuple):
 
-                print(output)
                 predictions = output[0]
                 max_score_bb_index, max_class_bb = output[1]
 
-                loss[0] = loss[0] + predictions[i, max_score_bb_index, 5+max_class_bb]
+                # Selecting the required class
+                loss[0] = loss[0] + predictions[i, max_score_bb_index, 5+target_category[i]]
 
             else:
                 loss[0] = loss[0] + output[i, target_category[i]]
